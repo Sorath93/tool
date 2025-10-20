@@ -26,18 +26,20 @@ class BaseSentimentAnalyzer(ABC):
         """Get both score and label efficiently in a single call."""
         pass
 
+
 class SentimentAnalyzer(BaseSentimentAnalyzer):
     """
     Main sentiment analyzer implementation using CardiffNLP Twitter RoBERTa model.
     Accepts string input and returns sentiment score (-1 to +1) and label.
     """
     
-    def __init__(self, model_name="cardiffnlp/twitter-roberta-base-sentiment-latest"):
+    def __init__(self, model_name="cardiffnlp/twitter-roberta-base-sentiment-latest", precision=4):
         from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
         self.label_mapping = {0: 'NEGATIVE', 1: 'NEUTRAL', 2: 'POSITIVE'}
+        self.precision = precision
     
     def _preprocess_text(self, text: str) -> str:
         """
@@ -87,32 +89,9 @@ class SentimentAnalyzer(BaseSentimentAnalyzer):
             outputs = self.model(**inputs)
         return torch.nn.functional.softmax(outputs.logits, dim=1).squeeze()
     
-    def get_sentiment_score(self, text: str) -> float:
-        """
-        Get numerical sentiment score.
-        
-        Returns:
-            Float between -1.0 (negative) and 1.0 (positive)
-        """
-        scores = self._predict(text)
-        positive_score = scores[2].item()
-        negative_score = scores[0].item()
-        return positive_score - negative_score
-    
-    def get_sentiment_label(self, text: str) -> Label:
-        """
-        Get categorical sentiment label.
-        
-        Returns:
-            'POSITIVE', 'NEGATIVE', or 'NEUTRAL'
-        """
-        scores = self._predict(text)
-        predicted_class = torch.argmax(scores).item()
-        return self.label_mapping[predicted_class]
-    
     def analyze(self, text: str) -> Tuple[float, Label]:
         """
-        Convenience method to get both score and label efficiently.
+        Primary method to get both score and label.
         
         Returns:
             Tuple of (score, label)
@@ -122,13 +101,33 @@ class SentimentAnalyzer(BaseSentimentAnalyzer):
         # Calculate score
         positive_score = scores[2].item()
         negative_score = scores[0].item()
-        score = positive_score - negative_score
+        score = round(positive_score - negative_score, self.precision)
         
         # Calculate label
         predicted_class = torch.argmax(scores).item()
         label = self.label_mapping[predicted_class]
         
         return score, label
+    
+    def get_sentiment_score(self, text: str) -> float:
+        """
+        Get numerical sentiment score.
+        
+        Returns:
+            Float between -1.0 (negative) and 1.0 (positive), rounded to configured precision
+        """
+        score, _ = self.analyze(text)
+        return score
+    
+    def get_sentiment_label(self, text: str) -> Label:
+        """
+        Get categorical sentiment label.
+        
+        Returns:
+            'POSITIVE', 'NEGATIVE', or 'NEUTRAL'
+        """
+        _, label = self.analyze(text)
+        return label
 
 
 class SentimentAnalyzerFactory:
