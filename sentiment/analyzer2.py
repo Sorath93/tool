@@ -138,7 +138,7 @@ class SentimentAnalyzerFactory:
     _analyzers = {
         'default': SentimentAnalyzer,
         # 'cloud': CloudSentimentAnalyzer,  # Example for future extension
-    }
+    } # why is this a class attribute?
     
     @classmethod
     def create(cls, analyzer_type: str = 'default', **kwargs) -> BaseSentimentAnalyzer:
