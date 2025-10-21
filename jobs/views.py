@@ -45,13 +45,7 @@ class JobStatusView(APIView):
     """
     Get job status and progress and other details
     """
-    def get(self, request):
-        job_id = request.data.get('job_id')
-        if not job_id:
-            return Response(
-                {"error": "Please provide a job_id"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+    def get(self, request, job_id):
         job = get_object_or_404(Job, id=job_id)
         
         return Response({
@@ -67,13 +61,7 @@ class JobCSVDownloadView(APIView):
     """
     Download job results as CSV
     """
-    def get(self, request):
-        job_id = request.data.get('job_id')
-        if not job_id:
-            return Response(
-                {"error": "Please provide a job_id"}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+    def get(self, request, job_id):
         job = get_object_or_404(Job, id=job_id)
         
         if job.status != 'COMPLETED':

@@ -50,7 +50,7 @@ def process_job(job_id):
                 # Analyze sentiment immediately
                 score, label = analyzer.analyze(comment.text)
                 CommentSentiment.objects.create(
-                    post=comment,
+                    comment=comment,
                     score=score,
                     label=label
                 )
