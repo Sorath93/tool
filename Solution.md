@@ -1,12 +1,11 @@
 ## Contents
 - [Contents](#contents)
-- [Code Example](#code-example)
+- [Code](#code)
 - [Application Design](#application-design)
   - [Django/DRF](#djangodrf)
   - [Social Media Comments](#social-media-comments)
   - [Sentiment Analysis](#sentiment-analysis)
 - [API Endpoints](#api-endpoints)
-    - [Request Flow](#request-flow)
   - [Application Structure](#application-structure)
 - [System Architecture](#system-architecture)
 - [Security \& Authentication](#security--authentication)
@@ -14,8 +13,11 @@
 - [CI/CD](#cicd)
 - [Maintenance](#maintenance)
 
-## Code Example
-https://github.com/Sorath93/tool/tree/main/sentiment
+## Code
+
+Project: https://github.com/Sorath93/tool
+
+SentimentAnalyzer: https://github.com/Sorath93/tool/tree/main/sentiment
 
 ## Application Design
 
@@ -36,7 +38,7 @@ I decided to use **Django** for the application and **Django REST Framework** to
 
 ### Social Media Comments
 
-**In terms of fetching comments** I haven't implemented this, however, some considerations I would make are as follows:
+**In terms of fetching comments** some considerations I would make are as follows:
 * Do we want to store the comments? If so, we should probably implement behaviour that deletes comments that are more than X days/weeks old. For long term storage we could consider an object storage solution like Azure Blob Storage to store CSVs.
 * Storing comments at this stage might not be necessary though - the project is described as "opportunistic" and with ROI inititally uncertain.
 * Do the social media platforms have official APIs? What are the options?
@@ -50,7 +52,7 @@ I decided to use **Django** for the application and **Django REST Framework** to
 
 ### Sentiment Analysis
 
-**To implement the ``SentimentAnalyzer`` class**, I looked into three options: VADER, CardiffNLP Twitter RoBERTa (on Hugging Face), and Azure AI Language. I decided to go with CardiffNLP Twitter RoBERTa because it's trained on a huge amount of tweets (~124M), making it a reasonable choice for social media comments. It's also fine-tuned for sentiment analysis, handles hashtags and emojis, and can classify text as positive, neutral, or negative. It  also required low integration efforts - only needed two Python libraries to get going (``torch`` & ``transformers``) and the example pipeline on Hugging Face was enough to understand how to approach the code. These reasons gave me confidence in being able to justify it to stakeholders, if needed.
+**To implement the ``SentimentAnalyzer`` class**, I looked into three options: VADER, CardiffNLP Twitter RoBERTa (on Hugging Face), and Azure AI Language. I decided to go with CardiffNLP Twitter RoBERTa because it's trained on a huge amount of tweets (~124M), making it a reasonable choice for social media comments. It's also fine-tuned for sentiment analysis, handles hashtags and emojis, and can classify text as positive, neutral, or negative. It  also required low integration efforts - only needed two Python libraries to get going (``torch`` & ``transformers``) and the example pipeline on Hugging Face was enough to understand how to approach the code.
 
 On the other hand, VADER is a rule-based lexicon method and weaker when it comes to context - for an application that is presented to stakeholders, even as opportunistic, I preferred the robustness of the Hugging Face model. Azure AI Language would have introduced unnecessary complexity for now (billing, API key storage, etc). However, I wanted to make the approach pluggable, therefore, implemented an Abstract Class and Factory Class. 
 
@@ -71,8 +73,6 @@ These URLs patterns map to the Django REST Framework views in ``jobs/views.py``.
 ``tool/celery.py`` has the Celery app configuration. 
 
 *Note that the API  and task code is not complete or tested - I just wanted to have a go!*
-
-#### Request Flow
 
 ### Application Structure
 ```
