@@ -316,10 +316,16 @@ That’s it. Minimal, scalable, cost-sane, and fits your <10 users, bursty, non-
 
 To consider: <10 users, usage is in bursts of activity, results not immediate and users will revisit for results, security
 
+Producer consumer pattern
+https://dsysd-dev.medium.com/system-design-patterns-producer-consumer-pattern-1572f813329b
+
 **Request Flows**
+
 ![alt text](image.png)
 
 ![alt text](image-1.png)
+
+-- I think these might be wrong.
 
 **High Level Architecture**
 
@@ -328,6 +334,8 @@ To consider: <10 users, usage is in bursts of activity, results not immediate an
 **Deployment Architecture**
 ![alt text](image-3.png)
 
+
+add Azure Key Vault to this. 
 
 ## Security & Authentication
 
