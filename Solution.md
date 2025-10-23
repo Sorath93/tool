@@ -1,23 +1,28 @@
-# Solution Design
+## Contents
+- [Contents](#contents)
+- [Code Example](#code-example)
+- [Application Design](#application-design)
+  - [Django/DRF](#djangodrf)
+  - [Social Media Comments](#social-media-comments)
+  - [Sentiment Analysis](#sentiment-analysis)
+- [API Endpoints](#api-endpoints)
+    - [Request Flow](#request-flow)
+  - [Application Structure](#application-structure)
+- [System Architecture](#system-architecture)
+- [Security \& Authentication](#security--authentication)
+- [Performance](#performance)
+- [CI/CD](#cicd)
+- [Maintenance](#maintenance)
 
-## Table of Contents
-
-## Overview
-
-Short summary (2–3 paragraphs):
-
-What the system does.
-
-Your guiding principles (MVP → scalable; cost-conscious; maintainable).
-
-Technologies used (Python 3.12, Django/DRF, Celery, Redis, PostgreSQL, Hugging Face Transformers).
-
+## Code Example
+https://github.com/Sorath93/tool/tree/main/sentiment
 
 ## Application Design
 
---- include logos of the tech stack here !! \
+### Django/DRF
+
 I decided to use **Django** for the application and **Django REST Framework** to implement the API.
-* Django's "batteries-included" philosophy allows for rapid development with minimal setup. Since this project is an MVP that needs to be put in front of users as soon as possible to validate value, the Django/DRF combination provides the best balance between speed and productivity/usable/quality. Furthermore, the out-of-the-box combination of ORM for data models, authentication/authorization, and data validation means that we can focus on business logic.
+* Django's "batteries-included" philosophy allows for rapid development with minimal setup. Since this project is an MVP that needs to be put in front of users as soon as possible to validate value, the Django/DRF combination provides the best balance between speed and quality. Furthermore, the out-of-the-box combination of ORM for data models, authentication/authorization, and data validation means that we can focus on business logic.
 * I looked into other frameworks like Flask and FastAPI, but chose not to use them for this exercise. 
   * Flask is lightweight, which would require setting up components from scratch (ORM, authentication, request handling).
   * FastAPI is a good modern option, especially for async use cases and OpenAPI specs, but, for me, it started to introduce extra learning overhead. I think it would be a good option if the application goes beyond MVP and use-case is validated! 
@@ -29,40 +34,47 @@ I decided to use **Django** for the application and **Django REST Framework** to
 - **Broker**: Redis
 - **Database**: SQLite in development. Can opt for PostgreSQL in production.
 
-**Why Celery + Redis?** 
+### Social Media Comments
 
 **In terms of fetching comments** I haven't implemented this, however, some considerations I would make are as follows:
-* Do the platforms have official APIs? What are the options?
+* Do we want to store the comments? If so, we should probably implement behaviour that deletes comments that are more than X days/weeks old. For long term storage we could consider an object storage solution like Azure Blob Storage to store CSVs.
+* Storing comments at this stage might not be necessary though - the project is described as "opportunistic" and with ROI inititally uncertain.
+* Do the social media platforms have official APIs? What are the options?
   * It looks like the Instagram API is for Businesses/Creators to access their own data, TikTok requires a registration process, and Youtube has an official API that exposes comments (scraping Google Applications is against the Terms of Service).
   * From the above it seems as though we'll need to have a hybrid approach to begin with - scraping for Instagram and TikTok, and integrating Youtube API. 
   * Once ROI is proven we could consider third-party API providers (e.g. Apify).
+* How do we make the process robust? E.g. failing to fetch comments or only being able to get a partial amount comments - we need to handle it - do we retry, move-on, fallback? Maybe we can have thresholds, for example, each post should have at least 50% of comments scraped? 
 * Should we limit the number of comments scraped per post? How do we decide on a limit? Is there a sampling method we could use?
 * What happens when there are no comments? What about if there's little amount of comments - how does this affect the overall sentiment score?
-* We should probably implement logic that avoids fetching comments for a post that already has them in the database. E.g. if an Account Manager has two lists of posts with common links.
-* How many links on average will Account Managers be submitting at a time - does this need to be limited? Or we need to consider the performance and scalability of this. 
-* 
+* We should probably implement logic that avoids fetching comments for a post that already has them in the database. E.g. if an Account Manager has two lists with common links.  
+
+### Sentiment Analysis
 
 **To implement the ``SentimentAnalyzer`` class**, I looked into three options: VADER, CardiffNLP Twitter RoBERTa (on Hugging Face), and Azure AI Language. I decided to go with CardiffNLP Twitter RoBERTa because it's trained on a huge amount of tweets (~124M), making it a reasonable choice for social media comments. It's also fine-tuned for sentiment analysis, handles hashtags and emojis, and can classify text as positive, neutral, or negative. It  also required low integration efforts - only needed two Python libraries to get going (``torch`` & ``transformers``) and the example pipeline on Hugging Face was enough to understand how to approach the code. These reasons gave me confidence in being able to justify it to stakeholders, if needed.
 
 On the other hand, VADER is a rule-based lexicon method and weaker when it comes to context - for an application that is presented to stakeholders, even as opportunistic, I preferred the robustness of the Hugging Face model. Azure AI Language would have introduced unnecessary complexity for now (billing, API key storage, etc). However, I wanted to make the approach pluggable, therefore, implemented an Abstract Class and Factory Class. 
 
-**API endpoints**
+## API Endpoints
 
 The URL pattern mapping can be seen in ``jobs/urls.py``
 
 ``api/jobs/create`` -> Accepts a list of URLs and executes the job.
 
-``api/jobs/<intLjob_id>/status`` -> GET the status of a job
+``api/jobs/<int:job_id>/status`` -> GET the status of a job
 
 ``api/jobs/<int:job_id>/download/`` -> Download the results of a job as a CSV.
 
-These URLs patterns map to Django REST Framework views in ``jobs/views.py``.
+These URLs patterns map to the Django REST Framework views in ``jobs/views.py``. ``jobs/models.py`` defines the data models.
 
 ``jobs/tasks.py`` has the Celery tasks.
 
 ``tool/celery.py`` has the Celery app configuration. 
 
-**Application structure**
+*Note that the API  and task code is not complete or tested - I just wanted to have a go!*
+
+#### Request Flow
+
+### Application Structure
 ```
 .
 ├── jobs
@@ -96,257 +108,54 @@ These URLs patterns map to Django REST Framework views in ``jobs/views.py``.
 I decided to separate the Django project into two apps: ``jobs`` and ``sentiment``. The ``jobs`` app is treated as the orchestration layer (API handling and storage) and the ``sentiment`` app is where the sentiment analysis sits. 
 
 My reasons for separation instead of one app:
-* Clarity - obvious at a glance for where to go when navigating the repo. Developer experience is important to me.
-* Reusability and Scalability - You can extract the ``sentiment`` app as is. For example, if you decide on another framework, architecture pattern (e.g. microservices etc), or simply want to use it for another project or use-case.
+* Clarity - it's obvious at a glance where to go when navigating the repo. Developer experience is important to me.
+* Reusability and Scalability - You can extract the ``sentiment`` app as is. For example, if you decide on another framework, architecture pattern (e.g. microservices, different API protocol etc), or simply want to use it for another project or use-case.
 
 
 ## System Architecture
 
+The information we have:
+* No more than 10 users (but audience might grow in the future)
+* Usage of the app is in bursts of activity rather than consistent
+* Results do not need to be immediate and users will return to the application to retrieve results. 
 
-[User / Frontend]
-        |
-        v  (HTTPS)
-+-----------------------+
-| Django API (ACA)      |  <-- Built-in ACA ingress/load-balancing
-|  - /jobs (create)     |      across replicas
-|  - /jobs/{id}/status  |  --> [Postgres]
-|  - /jobs/{id}/csv     |
-+----------+------------+
-           | enqueue
-           v
-      [Redis Queue]
-           |
-           v (dequeue)
-+-----------------------+
-| Celery Worker (ACA)   |  -> results -> [Postgres]
-| (no public ingress)   |  -> CSV -> [Blob Storage] (optional)
-+-----------------------+
+This tells me that jobs need to be handled in the background and resources should scale dynamically based on demand. During quiet periods, the system should scale down to minimize costs but when bursts of activity occur it should automatically scale. 
 
+This suggests an asynchronous task queue approach - the API creates a job, puts it in a queue, and a separate worker processes it in the background. The API immediately returns a response to the client so the user can continue using the application and check back later for the results. I chose Celery and Redis for this, which integrate easily with Django via the ``celery`` and ``redis`` Python libraries. Celery is for task execution and Redis is the message broker. 
 
-We deploy the system on Azure Container Apps (ACA) using two containers: a Django API and a Celery worker. The API exposes endpoints to create jobs, check job status, and download results. When a job is created, the API persists job metadata in Postgres and enqueues work on Azure Cache for Redis. The Celery worker (also running on ACA) consumes tasks from Redis, performs comment collection and sentiment analysis, then writes results and status updates back to Postgres (and optionally materializes a CSV to Azure Blob Storage). This design fits the expected usage pattern—fewer than 10 users with bursty activity and non-immediate results—by decoupling request/response from processing. It supports autoscaling during bursts and scales to zero when idle, minimizing cost while keeping the codebase simple (Django + Celery) and maintainable.
-
-
-how azure container apps handles bursts (and what it means for cost)
-
-Do Container Apps “always run”?
-Not necessarily. With Consumption pricing in ACA, you can set minReplicas = 0 (the default), which means the container scales to zero when there’s no traffic/trigger. When new traffic arrives, ACA scales out based on rules (HTTP concurrency, queue depth, cron, etc.) via KEDA.
-
-Why this is good for bursts
-
-During quiet periods, replicas drop to 0 → no compute billed for the app containers.
-
-When a burst arrives (HTTP requests or queue messages), ACA spins up instances quickly to handle load, then scales back down once work drains.
-
-What you pay for (at a high level)
-
-vCPU-seconds and GB-seconds for each container only while it’s running (i.e., non-zero replicas).
-
-Always-on costs for managed services you use: Redis, Postgres, Blob Storage, and logging.
-
-Networking/egress if applicable.
-
-Tuning knobs (cost vs latency):
-
-minReplicas = 0 → cheapest; may introduce cold starts (a few seconds) when a burst begins.
-
-minReplicas = 1 on the API → keeps one warm instance to reduce cold-start latency; small steady cost.
-
-Worker scale rules: e.g., “1 replica per N Redis messages” with a maxReplicas cap (like 5–10).
-
-Resource requests: choose small sizes (e.g., 0.25 vCPU / 0.5–1 GB) for worker/API to keep per-second costs down; scale out horizontally during bursts.
-
-When Azure Functions might be even cheaper:
-If your background work is fully event-driven and you don’t want to run Django/Celery, Azure Functions can be cheapest at tiny scales. But given your Django + Celery + Redis stack, ACA keeps your architecture straightforward without refactoring.
-
-
-The container apps to set up
-
-api (Django/DRF)
-
-Purpose: Receives requests, creates jobs, exposes /jobs, /status, /csv.
-
-Ingress: External (HTTPS) via ACA’s built-in ingress/LB.
-
-Scaling (KEDA HTTP): target concurrency (e.g., 20–50 req/replica), minReplicas: 0 or 1, maxReplicas: 2–3.
-
-Resources: small (e.g., 0.25–0.5 vCPU, 0.5–1 GB RAM).
-
-Secrets/Config: DB URL, Redis URL, Blob SAS/conn string via app settings/Key Vault ref.
-
-Notes: Serve only the API; put static files on Blob Static Website or use Whitenoise.
-
-worker (Celery worker)
-
-Purpose: Dequeues tasks from Redis, scrapes/comments, runs sentiment, writes results.
-
-Ingress: Disabled (no public endpoint).
-
-Scaling (KEDA Redis): scale on queue length (e.g., 1 replica per 5–10 msgs), minReplicas: 0, maxReplicas: 3–5.
-
-Resources: small→medium per replica depending on model size (start 0.5 vCPU/1–2 GB).
-
-Notes: This is the only process consuming from Redis.
-
-(Optional but recommended) scheduler
-
-Pick one of these:
-
-Celery Beat as a tiny always-on container app to schedule periodic tasks, or
-
-ACA Jobs (scheduled) to run containers on a CRON (no always-on cost), or
-
-Azure Functions (Timer trigger) if you prefer serverless scheduling.
-
-Use cases: housekeeping, stale-job sweeps, CSV cleanup/backfills, health checks.
-
-(Optional) ACA Job: db-migrate (on-demand)
-
-Purpose: Run migrations/seeds as a one-shot job during deployments.
-
-Ingress: none. Trigger manually or via pipeline.
-
-Managed services you’ll also create (not ACA): Azure Postgres Flexible Server, Azure Cache for Redis, Azure Storage (Blob), and Log Analytics / App Insights for logs/metrics.
-
-
-
-Quick config checklist (copy/paste into your runbook)
-
-Environment: aca-env-{stage} (region close to users)
-
-App: api
-
-Ingress: external HTTPS
-
-Scale: HTTP concurrency 30; min=0 (or 1 for warm), max=3
-
-Resources: 0.5 vCPU / 1 GB
-
-Env: DATABASE_URL, REDIS_URL, BLOB_CONN/SAS
-
-App: worker
-
-Ingress: disabled
-
-Scale: Redis queue length (e.g., 1 per 10 msgs), min=0, max=5
-
-Resources: 0.5 vCPU / 1–2 GB
-
-Scheduler: Celery Beat or ACA Scheduled Job (preferred to avoid always-on)
-
-Observability: Log Analytics + App Insights; capture job_id as correlation id
-
-Security: system-assigned managed identity + Key Vault references for secrets (optional but nice)
-
-Data: Postgres (Basic/Small), Redis (Basic), Blob (Hot)
-
-That’s it. Minimal, scalable, cost-sane, and fits your <10 users, bursty, non-immediate results brief.
-
-                         [User / Frontend]
-                                 |
-                                 v  (HTTPS)
-
-+==========================================================================+
-|        Azure Container Apps Environment (e.g., prod-env / single VNet)   |
-|                                                                          |
-|   (Managed Ingress / LB)                                                 |
-|            |                                                             |
-|            v                                                             |
-|   +-----------------------+                                              |
-|   |  Django API (ACA)     |                                              |
-|   |  - /jobs (create)     |                                              |
-|   |  - /jobs/{id}/status  |-----> [ Postgres* ]  (write job, read status)|
-|   |  - /jobs/{id}/csv     |                                              |
-|   +-----------+-----------+                                              |
-|               |                                                          |
-|               |  enqueue job payload                                     |
-|               v                                                          |
-|          [ Redis* ]  <=================  dequeue tasks  ==================+
-|               ^                                                          |
-|               |                                                          |
-|   +-----------+-----------+                                              |
-|   | Celery Worker (ACA)   |-----> [ Postgres* ]  (write results/status)  |
-|   |  (no public ingress)  |-----> [ Blob Storage* ]  (CSV, optional)     |
-|   +-----------------------+                                              |
-|                                                                          |
-+==========================================================================+
-
-* Managed services (Postgres, Redis, Blob) are separate Azure resources.
-  They can be public-with-firewall or private via VNet/Private Endpoints.
-
-
-* Managed services (Postgres, Redis, Blob) are separate Azure resources.
-  They can be reachable privately (VNet-injected) or over public endpoints with firewall rules.
-
-
-
-
-                         [User / Frontend]
-                                 |
-                                 v  (HTTPS)
-
-+==========================================================================+
-|         Azure Container Apps Environment (single environment)            |
-|                                                                          |
-|   +-----------------------+                                              |
-|   |  Django API (ACA)     |-----> [ Azure Database for PostgreSQL ]*     |
-|   |  - /jobs (create)     |          (store job + status + results)      |
-|   |  - /jobs/{id}/status  |                                              |
-|   |  - /jobs/{id}/csv     |                                              |
-|   +-----------+-----------+                                              |
-|               |                                                          |
-|               |  enqueue job payload                                     |
-|               v                                                          |
-|        [ Azure Cache for Redis ]*                                        |
-|               |                                                          |
-|               |  dequeue tasks                                           |
-|               v                                                          |
-|   +-----------------------+                                              |
-|   | Celery Worker (ACA)   |-----> [ Azure Database for PostgreSQL ]*     |
-|   |  (no public ingress)  |-----> [ Azure Blob Storage ]* (CSV optional) |
-|   +-----------------------+                                              |
-|                                                                          |
-+==========================================================================+
-
-* Managed services (NOT container apps):
-  - Azure Database for PostgreSQL = fully managed Postgres
-  - Azure Cache for Redis = fully managed Redis broker
-  - Azure Blob Storage = managed file/object storage
-
-## System Architecture
-
-To consider: <10 users, usage is in bursts of activity, results not immediate and users will revisit for results, security
-
-Producer consumer pattern
-https://dsysd-dev.medium.com/system-design-patterns-producer-consumer-pattern-1572f813329b
-
-**Request Flows**
-
-![alt text](image.png)
-
-![alt text](image-1.png)
-
--- I think these might be wrong.
-
-**High Level Architecture**
+Furthermore, Celery workers can scale horizontally when queue depth increases, i.e. when there are a lot of jobs waiting to be completed.  
 
 ![alt text](image-2.png)
 
-**Deployment Architecture**
+In terms of **deploying** the application and **scalability** - there're two scenarios to consider:
+* Increased number of users
+* Increased number of jobs
+
+This suggests that I could containerise the Django app and also containerise the Celery app to allow for independent scaling.
+
 ![alt text](image-3.png)
 
+The diagram demonstrates the containers as Azure Container Apps inside an Azure Container Apps environment. Azure Container Apps are able to manage horizontal scaling through a set of declarative scaling rules (in our case increased requests and/or Redis queue depth). The documentation says "As a container app revision scales out, new instances (replicas) of the revision are created on-demand" - this suits our requirements of 'bursty' usage and possible increase in users.
 
-add Azure Key Vault to this. 
+Cost-efficiency is also a benefit of this setup - we can set the min/max replicas, meaning that we're not billed if a Container App scales to zero. This seems ideal for an opportunistic project. 
+
+You'll also notice the Azure Blob Storage (for Object storage). This could possibly be used to store CSV files. 
 
 ## Security & Authentication
 
-The application implements **OpenID Connect (OIDC) authentication** with **JWT token validation** as specified in the brief, using Croud as the identity provider.
-
-1. Users authenticate with Croud OIDC provider
-2. Croud issues a JWT token containing user identity and claims
+1. Users authenticate with Croud OIDC
+2. Croud issues a JWT token
 3. Client applications include the JWT token in API requests (`Authorization: Bearer <token>`)
 4. Our Django API validates the JWT token
 5. Authenticated users can access endpoints
 
+![alt text](image-5.png)
+
+The Django REST Framework documentation suggests using the Simple JWT (``djangorestframework-simplejwt``) library to do this. I would write a cusom authentication class to validate tokens against Croud's OIDC public key then add this authentication class to the API views via the ``@authentication_classes`` decorator.
+
+**Secure Configuration Storage**
+
+Sensitive information such as database credentials, Redis connection strings, API keys, etc. can be stored in Azure Key Vault. Django retrieves these values via `os.environ.get()` to avoid hard-coding. 
 
 ## Performance
 
@@ -366,7 +175,10 @@ The Azure Container Apps services can be configured to pull the image from the r
 
 ## Sources
 
+These are some sources I read
+
 https://dataloop.ai/library/model/cardiffnlp_twitter-roberta-base-sentiment/#training-data-and-how-it-works 
 https://huggingface.co/cardiffnlp/twitter-roberta-base-sentiment-latest
 https://medium.com/@jaxayprajapati/now-sentiment-analysis-becomes-effortless-with-azure-ai-language-f3e81089fb1b
 https://github.com/public-apis/public-apis?tab=readme-ov-file#social
+https://dsysd-dev.medium.com/system-design-patterns-producer-consumer-pattern-1572f813329b
