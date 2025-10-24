@@ -1,9 +1,26 @@
+import logging
 import re
 import torch
 from typing import Tuple, Literal
 from abc import ABC, abstractmethod
 
 Label = Literal["POSITIVE", "NEGATIVE", "NEUTRAL"]
+
+logger = logging.getLogger(__name__)
+
+
+# Custom exceptions
+
+
+class SentimentAnalysisError(Exception):
+    """Custom exception for sentiment analysis errors."""
+
+
+class ModelLoadError(SentimentAnalysisError):
+    """Exception raised when the model fails to load."""
+
+
+# Abstract Base class
 
 
 class BaseSentimentAnalyzer(ABC):
@@ -26,40 +43,52 @@ class BaseSentimentAnalyzer(ABC):
         pass
 
 
+# Implementation using CardiffNLP Twitter RoBERTa model
+
+
 class SentimentAnalyzer(BaseSentimentAnalyzer):
     """
-    Main sentiment analyzer implementation using CardiffNLP Twitter RoBERTa model as the default.
+    Main sentiment analyzer implementation using CardiffNLP Twitter RoBERTa model.
     """
 
-    def __init__(
-        self, model_name="cardiffnlp/twitter-roberta-base-sentiment-latest", precision=2
-    ):
-        from transformers import AutoModelForSequenceClassification, AutoTokenizer
+    DEFAULT_MODEL = "cardiffnlp/twitter-roberta-base-sentiment-latest"
+    LABEL_MAPPING = {0: "NEGATIVE", 1: "NEUTRAL", 2: "POSITIVE"}
 
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.token_limit = 512  # 512 token limit for RoBERTa
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-        self.label_mapping = {0: "NEGATIVE", 1: "NEUTRAL", 2: "POSITIVE"}
+    def __init__(
+        self,
+        model_name: str = DEFAULT_MODEL,
+        label_mapping: dict = None,
+        precision: int = 2,
+        token_limit: int = 512,
+    ):
+
+        if not isinstance(precision, int) or precision < 0:
+            raise ValueError("Precision must be a non-negative integer")
+
+        self.model_name = model_name
         self.precision = precision
+        self.token_limit = token_limit
+        self.label_mapping = (
+            self.LABEL_MAPPING if label_mapping is None else label_mapping
+        )
+
+        try:
+            from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            self.model = AutoModelForSequenceClassification.from_pretrained(
+                self.model_name
+            )
+        except Exception as e:
+            logger.error(f"Failed to load model '{self.model_name}': {e}")
+            raise ModelLoadError(f"Could not load model '{self.model_name}'") from e
 
     def _preprocess_text(self, text: str) -> str:
         """
-        Light preprocessing for CardiffNLP Twitter sentiment model.
-
-        This model was specifically trained on Twitter data with certain preprocessing
-        - URLs and mentions are normalized to "http" and "@user" tokens
-        - Text case is preserved (model is case-sensitive)
-        - Hashtags are kept intact (model uses them for context)
-        - Emojis are preserved (tokenizer handles them properly)
-
-        Args:
-            text: Raw input text to preprocess
-
-        Returns:
-            Preprocessed text ready for the model
-
-        Raises:
-            ValueError: If input is not a valid non-empty string
+        CardiffNLP Twitter preprocessing pattern:
+        - Map @mentions -> '@user'
+        - Map URLs -> 'http'
+        - Preserve case/hashtags/emojis
         """
 
         if not isinstance(text, str) or not text.strip():
@@ -140,6 +169,9 @@ class SentimentAnalyzer(BaseSentimentAnalyzer):
         return label
 
 
+# Factory class for creating sentiment analyzers
+
+
 class SentimentAnalyzerFactory:
     """
     Makes it easy to switch between different approaches to sentiment analysis.
@@ -183,7 +215,6 @@ if __name__ == "__main__":
 
     analyzer = SentimentAnalyzerFactory.create("default")
 
-    # Test with some examples
     test_texts = [
         "I love this! 🔥",
         "This is terrible 😞",
@@ -191,10 +222,10 @@ if __name__ == "__main__":
         "https://example.com @user check this out!!!",
         "good",
         "bad",
-        "meh" * 1000,  # Very long text test
+        "meh" * 1000,
     ]
 
     for text in test_texts:
         score, label = analyzer.analyze(text)
         print(f"Text: {text}")
-        print(f"Score: {score:.3f}, Label: {label}\n")
+        print(f"Score: {score}, Label: {label}\n")
