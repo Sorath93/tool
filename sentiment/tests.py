@@ -1,7 +1,7 @@
 # unit testing
 
 import unittest
-from analyzer import SentimentAnalyzer, Label
+from analyzer import SentimentAnalyzer, ModelLoadError
 
 
 class TestSentimentAnalyzer(unittest.TestCase):
@@ -69,3 +69,7 @@ class TestSentimentAnalyzer(unittest.TestCase):
         processed = self.analyzer._preprocess_text(text)
         expected = text
         self.assertEqual(processed, expected)
+
+    def test_model_load_failure(self):
+        with self.assertRaises(ModelLoadError):
+            SentimentAnalyzer(model_name="non_existent_model")
